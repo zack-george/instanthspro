@@ -56,35 +56,38 @@ function App() {
 
     // --- Authentication Effect ---
     useEffect(() => {
-        // More robust handling of the redirect result
-        const handleAuthRedirect = async () => {
-            try {
-                // This promise resolves when the user is redirected back to the app
-                await getRedirectResult(auth);
-            } catch (error) {
-                setError("Failed to sign in. Please try again.");
-                console.error("Auth redirect error:", error);
-            }
-            // Once redirect is handled (or if there was no redirect), stop loading
-            setIsAuthLoading(false); 
-        };
-        handleAuthRedirect();
-
+        // Process the redirect result when the component mounts.
+        // This finalizes the sign-in process initiated by signInWithRedirect.
+        getRedirectResult(auth).catch((error) => {
+            // Handle errors here, such as the user closing the sign-in window.
+            setError("Failed to complete sign-in. Please try again.");
+            console.error("Auth redirect error:", error);
+            // If the redirect fails, we should stop the loading indicator.
+            setIsAuthLoading(false);
+        });
+    
+        // onAuthStateChanged is the single source of truth for the user's auth state.
         const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
             if (currentUser) {
                 setUser(currentUser);
                 setPage('dashboard');
             } else {
                 setUser(null);
-                setPage('landing');
+                // Only set page to landing if not on a legal page
+                if (page !== 'privacy' && page !== 'terms') {
+                    setPage('landing');
+                }
                 setProfile(null);
                 setGeneratedImages([]);
             }
-             // Ensure loading is false after auth state is confirmed
+            // This is the definitive point where we know the auth state has been determined.
+            // Whether the user is logged in or out, the initial auth check is complete.
             setIsAuthLoading(false);
         });
+    
+        // Cleanup the listener when the component unmounts.
         return () => unsubscribe();
-    }, []);
+    }, [page]); // Rerun if page changes to handle back navigation correctly
 
     // --- User Profile & Data Listener Effect ---
     useEffect(() => {
@@ -316,6 +319,69 @@ function App() {
     };
     
     // --- UI Components ---
+    const LegalPage = ({ title, children, onBack }) => (
+        <div className="w-full min-h-screen bg-gray-100 text-gray-800">
+             <header className="bg-white shadow-sm">
+                <div className="container mx-auto px-6 py-4 flex justify-between items-center">
+                    <h1 className="text-2xl font-bold">AI Headshot Generator</h1>
+                     <button onClick={onBack} className="text-indigo-600 hover:text-indigo-800 font-bold py-2 px-4 rounded-lg transition-colors">
+                        &larr; Back to Home
+                    </button>
+                </div>
+            </header>
+            <main className="container mx-auto px-6 py-12">
+                <div className="bg-white p-8 rounded-lg shadow-md max-w-4xl mx-auto">
+                    <h2 className="text-3xl font-extrabold mb-6">{title}</h2>
+                    <div className="prose max-w-none">
+                        {children}
+                    </div>
+                </div>
+            </main>
+        </div>
+    );
+    
+    const PrivacyPolicy = ({ onBack }) => (
+        <LegalPage title="Privacy Policy" onBack={onBack}>
+            <p><strong>Last Updated: September 16, 2025</strong></p>
+            <p>Your privacy is important to us. This Privacy Policy explains how we collect, use, and share information about you when you use our AI Headshot Generator service.</p>
+            <h3>Information We Collect</h3>
+            <ul>
+                <li><strong>Account Information:</strong> When you create an account, we collect your email address and name as provided by Google Sign-In.</li>
+                <li><strong>Uploaded Images:</strong> We collect the selfies you upload to generate your headshots. These images are stored securely and are used solely for the purpose of generating your AI headshots.</li>
+                <li><strong>Generated Images:</strong> We store the headshots generated for you, which are accessible only through your account.</li>
+                <li><strong>Usage Data:</strong> We may collect data about your interactions with our service, such as which features you use.</li>
+            </ul>
+            <h3>How We Use Your Information</h3>
+            <ul>
+                <li>To provide, maintain, and improve our service.</li>
+                <li>To process your requests for generating AI headshots.</li>
+                <li>To communicate with you about your account and our services.</li>
+                <li>To enforce our terms and prevent fraudulent activity.</li>
+            </ul>
+            <h3>Data Sharing</h3>
+            <p>We do not sell your personal information. We may share your uploaded images with our AI model provider (Google Gemini) for the sole purpose of generating your headshots. These images are not used to train the AI model.</p>
+            <h3>Data Retention</h3>
+            <p>We retain your uploaded and generated images for as long as your account is active to allow you to access them. You may delete your account at any time, which will result in the deletion of your personal data and images.</p>
+        </LegalPage>
+    );
+
+    const TermsOfService = ({ onBack }) => (
+        <LegalPage title="Terms of Service" onBack={onBack}>
+            <p><strong>Last Updated: September 16, 2025</strong></p>
+            <p>By using the AI Headshot Generator (the "Service"), you agree to these Terms of Service. Please read them carefully.</p>
+            <h3>1. Your Account</h3>
+            <p>You are responsible for safeguarding your account. You agree not to disclose your password to any third party. You must notify us immediately upon becoming aware of any breach of security or unauthorized use of your account.</p>
+            <h3>2. Use of the Service</h3>
+            <p>You agree to use the Service only for lawful purposes. You must not upload any images that are illegal, obscene, defamatory, or that infringe upon the intellectual property rights of others. You retain all ownership rights to the selfies you upload.</p>
+            <h3>3. Generated Content</h3>
+            <p>You are granted full ownership and commercial rights to the headshots generated by the Service from your uploaded images. The Service uses AI, and the generated content may occasionally contain artifacts or inaccuracies. We are not liable for any such imperfections.</p>
+            <h3>4. Credits and Payment</h3>
+            <p>The Service operates on a credit-based system. Credits are purchased in packs and are non-refundable. One generation cycle consumes a fixed number of credits as specified on the pricing page. If a generation fails due to a technical error on our part, credits will be refunded.</p>
+            <h3>5. Termination</h3>
+            <p>We may terminate or suspend your account immediately, without prior notice or liability, for any reason whatsoever, including without limitation if you breach the Terms.</p>
+        </LegalPage>
+    );
+
     const LandingPage = () => (
         <div className="w-full min-h-screen bg-gray-900 text-white">
             <header className="container mx-auto px-6 py-4 flex justify-between items-center">
@@ -334,12 +400,14 @@ function App() {
                 <p className="text-xl text-gray-400 mb-8 max-w-2xl mx-auto">
                     Upload your selfies, and let our AI create professional headshots for your LinkedIn, website, or resume. No photoshoot required.
                 </p>
-                <button 
-                    onClick={handleSignIn} 
-                    disabled={isAuthLoading}
-                    className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-8 rounded-lg text-lg transition-transform transform hover:scale-105 disabled:bg-indigo-400 flex items-center justify-center">
-                    {isAuthLoading ? <Spinner small /> : 'Get Your Headshots Now'}
-                </button>
+                <div className="flex justify-center">
+                    <button 
+                        onClick={handleSignIn} 
+                        disabled={isAuthLoading}
+                        className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-8 rounded-lg text-lg transition-transform transform hover:scale-105 disabled:bg-indigo-400 flex items-center justify-center">
+                        {isAuthLoading ? <Spinner small /> : 'Get Your Headshots Now'}
+                    </button>
+                </div>
 
                 <div className="mt-20">
                     <h3 className="text-3xl font-bold mb-8">Examples</h3>
@@ -390,7 +458,12 @@ function App() {
                 </div>
             </main>
              <footer className="text-center py-8 text-gray-500 border-t border-gray-800 mt-12">
-                <p>&copy; 2024 AI Headshot Generator. All Rights Reserved.</p>
+                <div className="space-x-4">
+                    <button onClick={() => setPage('terms')} className="hover:text-gray-300">Terms of Service</button>
+                    <span>&bull;</span>
+                    <button onClick={() => setPage('privacy')} className="hover:text-gray-300">Privacy Policy</button>
+                </div>
+                <p className="mt-4">&copy; 2024 AI Headshot Generator. All Rights Reserved.</p>
             </footer>
         </div>
     );
@@ -417,7 +490,7 @@ function App() {
                 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     {/* Left Column: Controls */}
-                    <div className="lg:col-span-1 bg-white p-6 rounded-lg shadow-md space-y-6 h-fit">
+                    <div className="lg-col-span-1 bg-white p-6 rounded-lg shadow-md space-y-6 h-fit">
                         <div>
                             <h2 className="text-2xl font-bold text-gray-800">Your Credits</h2>
                             <div className="flex items-baseline mt-2">
@@ -546,7 +619,7 @@ function App() {
     );
     
     const Spinner = ({ small = false, large = false }) => (
-        <svg className={`animate-spin ${large ? 'h-10 w-10' : small ? 'h-5 w-5 mr-2' : 'h-5 w-5'} text-white`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 24 24">
+        <svg className={`animate-spin ${large ? 'h-10 w-10' : small ? 'h-5 w-5 mr-2' : 'h-5 w-5'} text-white`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>
@@ -554,6 +627,10 @@ function App() {
 
     // --- Page Router ---
     switch (page) {
+        case 'privacy':
+            return <PrivacyPolicy onBack={() => setPage('landing')} />;
+        case 'terms':
+            return <TermsOfService onBack={() => setPage('landing')} />;
         case 'dashboard':
             return <Dashboard />;
         case 'landing':
