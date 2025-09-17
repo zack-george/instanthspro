@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { initializeApp } from 'firebase/app';
 import { 
     getAuth, 
@@ -8,36 +8,32 @@ import {
     GoogleAuthProvider,
     signOut
 } from 'firebase/auth';
-import {
-    getFirestore,
-    doc,
-    setDoc,
+import { 
+    getFirestore, 
+    doc, 
+    getDoc, 
+    setDoc, 
     updateDoc,
     onSnapshot,
     collection,
     query,
     where,
-    addDoc
+    addDoc,
+    getDocs
 } from 'firebase/firestore';
 
 // --- Firebase Configuration ---
-// This configuration is a placeholder. In a real environment, these would be securely managed.
 const firebaseConfig = {
-    apiKey: process.env.REACT_APP_API_KEY,
-    authDomain: process.env.REACT_APP_AUTH_DOMAIN,
-    projectId: process.env.REACT_APP_PROJECT_ID,
-    storageBucket: process.env.REACT_APP_STORAGE_BUCKET,
-    messagingSenderId: process.env.REACT_APP_MESSAGING_SENDER_ID,
-    appId: process.env.REACT_APP_APP_ID,
-    measurementId: process.env.REACT_APP_MEASUREMENT_ID
+    apiKey: "AIzaSyC576BDEDAwyQwrZ_jx9Pp6shMDX3CQGF8",
+    authDomain: "instantheadshotpro.firebaseapp.com",
+    projectId: "instantheadshotpro",
+    storageBucket: "instantheadshotpro.appspot.com",
+    messagingSenderId: "25795193617",
+    appId: "1:25795193617:web:42f26b46df5a091bf3bab0",
+    measurementId: "G-X5NH3WF9XD"
 };
 
 // --- Firebase Initialization ---
-// NOTE: For the live environment, __firebase_config is injected.
-// Declare __firebase_config at the top to avoid use-before-define errors
-// eslint-disable-next-line no-var
-var __firebase_config;
-
 const app = initializeApp(typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -50,7 +46,8 @@ function App() {
     const [uploadedFiles, setUploadedFiles] = useState([]);
     const [generatedImages, setGeneratedImages] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
-    const [isTextLoading, setIsTextLoading] = useState(false); // For Gemini text features
+    const [isAuthLoading, setIsAuthLoading] = useState(true); // New state for auth loading
+    const [isTextLoading, setIsTextLoading] = useState(false);
     const [error, setError] = useState('');
     const [customPrompt, setCustomPrompt] = useState('');
     const [styleSuggestions, setStyleSuggestions] = useState([]);
@@ -59,12 +56,19 @@ function App() {
 
     // --- Authentication Effect ---
     useEffect(() => {
-        // Handle the result of the redirect authentication
-        getRedirectResult(auth)
-            .catch((error) => {
-                setError(error.message);
+        // More robust handling of the redirect result
+        const handleAuthRedirect = async () => {
+            try {
+                // This promise resolves when the user is redirected back to the app
+                await getRedirectResult(auth);
+            } catch (error) {
+                setError("Failed to sign in. Please try again.");
                 console.error("Auth redirect error:", error);
-            });
+            }
+            // Once redirect is handled (or if there was no redirect), stop loading
+            setIsAuthLoading(false); 
+        };
+        handleAuthRedirect();
 
         const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
             if (currentUser) {
@@ -76,6 +80,8 @@ function App() {
                 setProfile(null);
                 setGeneratedImages([]);
             }
+             // Ensure loading is false after auth state is confirmed
+            setIsAuthLoading(false);
         });
         return () => unsubscribe();
     }, []);
@@ -106,7 +112,6 @@ function App() {
             querySnapshot.forEach((doc) => {
                 images.push(...doc.data().images);
             });
-            // To avoid duplicates and show newest first
             const uniqueImages = [...new Set(images)];
             setGeneratedImages(uniqueImages.reverse());
         });
@@ -119,7 +124,7 @@ function App() {
     
     // --- Gemini Text Generation Helper ---
     const generateTextWithGemini = async (prompt, isJson = false) => {
-        const apiKey = ""; // Canvas provides this
+        const apiKey = ""; 
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
         
         const payload = {
@@ -149,8 +154,13 @@ function App() {
 
     // --- Helper Functions ---
     const handleSignIn = () => {
+        setIsAuthLoading(true); // Give immediate feedback
         const provider = new GoogleAuthProvider();
-        signInWithRedirect(auth, provider).catch((error) => setError(error.message));
+        signInWithRedirect(auth, provider).catch((error) => {
+            setError("Could not start sign-in process. Please check browser settings for pop-ups or third-party cookies.");
+            setIsAuthLoading(false); // Stop loading on immediate failure
+            console.error(error.message)
+        });
     };
 
     const handleSignOut = () => {
@@ -201,7 +211,7 @@ function App() {
 
         setIsLoading(true);
         setError('');
-        setLinkedInBio(''); // Clear previous bio
+        setLinkedInBio('');
 
         try {
             const profileRef = doc(db, 'profiles', user.uid);
@@ -310,8 +320,11 @@ function App() {
         <div className="w-full min-h-screen bg-gray-900 text-white">
             <header className="container mx-auto px-6 py-4 flex justify-between items-center">
                 <h1 className="text-2xl font-bold">AI Headshot Generator</h1>
-                <button onClick={handleSignIn} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-4 rounded-lg transition-colors">
-                    Login / Get Started
+                <button 
+                    onClick={handleSignIn} 
+                    disabled={isAuthLoading}
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-4 rounded-lg transition-colors disabled:bg-indigo-400 flex items-center justify-center">
+                    {isAuthLoading ? <Spinner small /> : 'Login / Get Started'}
                 </button>
             </header>
             <main className="container mx-auto px-6 text-center pt-24 pb-12">
@@ -321,8 +334,11 @@ function App() {
                 <p className="text-xl text-gray-400 mb-8 max-w-2xl mx-auto">
                     Upload your selfies, and let our AI create professional headshots for your LinkedIn, website, or resume. No photoshoot required.
                 </p>
-                <button onClick={handleSignIn} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-8 rounded-lg text-lg transition-transform transform hover:scale-105">
-                    Get Your Headshots Now
+                <button 
+                    onClick={handleSignIn} 
+                    disabled={isAuthLoading}
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-8 rounded-lg text-lg transition-transform transform hover:scale-105 disabled:bg-indigo-400 flex items-center justify-center">
+                    {isAuthLoading ? <Spinner small /> : 'Get Your Headshots Now'}
                 </button>
 
                 <div className="mt-20">
@@ -346,8 +362,11 @@ function App() {
                             <li className="flex items-center"><CheckIcon /> High-resolution downloads</li>
                             <li className="flex items-center"><CheckIcon /> Full ownership of your images</li>
                         </ul>
-                        <button onClick={handleSignIn} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-8 rounded-lg text-lg transition-transform transform hover:scale-105">
-                            Buy Now
+                        <button 
+                            onClick={handleSignIn} 
+                            disabled={isAuthLoading}
+                            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-8 rounded-lg text-lg transition-transform transform hover:scale-105 disabled:bg-indigo-400 flex items-center justify-center">
+                            {isAuthLoading ? <Spinner small /> : 'Buy Now'}
                         </button>
                     </div>
                 </div>
@@ -527,7 +546,7 @@ function App() {
     );
     
     const Spinner = ({ small = false, large = false }) => (
-        <svg className={`animate-spin ${large ? 'h-10 w-10' : small ? 'h-5 w-5 mr-2' : 'h-5 w-5'} text-white`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <svg className={`animate-spin ${large ? 'h-10 w-10' : small ? 'h-5 w-5 mr-2' : 'h-5 w-5'} text-white`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>
