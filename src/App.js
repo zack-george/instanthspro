@@ -34,7 +34,7 @@ const firebaseConfig = {
 };
 
 // --- Firebase Initialization ---
-const app = initializeApp(typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : firebaseConfig);
+const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
