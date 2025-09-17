@@ -21,6 +21,8 @@ import {
 } from 'firebase/firestore';
 
 // --- Firebase Configuration ---
+// NOTE FOR DEPLOYMENT: For a real production environment, these values should be
+// loaded from secure environment variables (like on Vercel) and not hardcoded in the source code.
 const firebaseConfig = {
     apiKey: process.env.REACT_APP_API,
     authDomain: process.env.REACT_APP_AUTH_DOMAIN,
@@ -28,7 +30,8 @@ const firebaseConfig = {
     storageBucket: process.env.REACT_APP_STORAGE_BUCKET,
     messagingSenderId: process.env.REACT_APP_MESSAGING_SENDER_ID,
     appId: process.env.REACT_APP_APP_ID,
-    measurementId: process.env.REACT_APP_MEASUREMENT_ID
+    measurementId: process.env.REACT_APP_MEASUREMENT_ID,
+    imageapiKey: process.env.REACT_APP_GEMINI_API
 };
 
 // --- Firebase Initialization ---
@@ -85,7 +88,7 @@ function App() {
     
         // Cleanup the listener when the component unmounts.
         return () => unsubscribe();
-    }, []); // This should only run ONCE on component mount.
+    }, [page]); // This should only run ONCE on component mount.
 
     // --- User Profile & Data Listener Effect ---
     useEffect(() => {
@@ -125,7 +128,9 @@ function App() {
     
     // --- Gemini Text Generation Helper ---
     const generateTextWithGemini = async (prompt, isJson = false) => {
-        const apiKey = process.env.REACT_APP_GEMINI_API; 
+        // TODO: For this to work in production, you must provide your Gemini API key,
+        // ideally through a secure environment variable.
+        const apiKey = process.env.REACT_APP_API; 
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
         
         const payload = {
@@ -224,8 +229,10 @@ function App() {
             const generated = [];
             
             for (const base64Image of base64Images) {
-                 const apiKey = process.env.REACT_APP_API;
-                 const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${apiKey}`;
+                // TODO: For this to work in production, you must provide your Gemini API key,
+                // ideally through a secure environment variable.
+                 const imageapiKey = process.env.REACT_APP_GEMINI_API;
+                 const apiUrl = `https://ai-professional-headshot-generator-25795193617.us-west1.run.app?key=${imageapiKey}`;
 
                  const systemInstruction = "You are an expert photographer specializing in professional headshots. Your task is to generate a high-quality, photorealistic headshot based on the person in the provided image, following the user's style request. The final image should be clean, professional, and suitable for corporate or personal branding use.";
                  const userStyleRequest = customPrompt 
