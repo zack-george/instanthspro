@@ -88,7 +88,7 @@ function App() {
     
         // Cleanup the listener when the component unmounts.
         return () => unsubscribe();
-    }, [page]); // This should only run ONCE on component mount.
+    }, []); // This should only run ONCE on component mount.
 
     // --- User Profile & Data Listener Effect ---
     useEffect(() => {
