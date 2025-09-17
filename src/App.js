@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { 
     getAuth, 
@@ -11,26 +11,24 @@ import {
 import { 
     getFirestore, 
     doc, 
-    getDoc, 
     setDoc, 
     updateDoc,
     onSnapshot,
     collection,
     query,
     where,
-    addDoc,
-    getDocs
+    addDoc
 } from 'firebase/firestore';
 
 // --- Firebase Configuration ---
 const firebaseConfig = {
-    apiKey: "AIzaSyC576BDEDAwyQwrZ_jx9Pp6shMDX3CQGF8",
-    authDomain: "instantheadshotpro.firebaseapp.com",
-    projectId: "instantheadshotpro",
-    storageBucket: "instantheadshotpro.appspot.com",
-    messagingSenderId: "25795193617",
-    appId: "1:25795193617:web:42f26b46df5a091bf3bab0",
-    measurementId: "G-X5NH3WF9XD"
+    apiKey: process.env.REACT_APP_API,
+    authDomain: process.env.REACT_APP_AUTH_DOMAIN,
+    projectId: process.env.REACT_APP_PROJECT_ID,
+    storageBucket: process.env.REACT_APP_STORAGE_BUCKET,
+    messagingSenderId: process.env.REACT_APP_MESSAGING_SENDER_ID,
+    appId: process.env.REACT_APP_APP_ID,
+    measurementId: process.env.REACT_APP_MEASUREMENT_ID
 };
 
 // --- Firebase Initialization ---
@@ -87,7 +85,7 @@ function App() {
     
         // Cleanup the listener when the component unmounts.
         return () => unsubscribe();
-    }, [page]); // Rerun if page changes to handle back navigation correctly
+    }, []); // This should only run ONCE on component mount.
 
     // --- User Profile & Data Listener Effect ---
     useEffect(() => {
@@ -127,7 +125,7 @@ function App() {
     
     // --- Gemini Text Generation Helper ---
     const generateTextWithGemini = async (prompt, isJson = false) => {
-        const apiKey = ""; 
+        const apiKey = process.env.REACT_APP_GEMINI_API; 
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
         
         const payload = {
@@ -226,7 +224,7 @@ function App() {
             const generated = [];
             
             for (const base64Image of base64Images) {
-                 const apiKey = "";
+                 const apiKey = process.env.REACT_APP_API;
                  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${apiKey}`;
 
                  const systemInstruction = "You are an expert photographer specializing in professional headshots. Your task is to generate a high-quality, photorealistic headshot based on the person in the provided image, following the user's style request. The final image should be clean, professional, and suitable for corporate or personal branding use.";
