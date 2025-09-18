@@ -1,17 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
-import { 
-    getAuth, 
-    onAuthStateChanged, 
+import {
+    getAuth,
+    onAuthStateChanged,
     signInWithRedirect,
     getRedirectResult,
     GoogleAuthProvider,
     signOut
 } from 'firebase/auth';
-import { 
-    getFirestore, 
-    doc, 
-    setDoc, 
+import {
+    getFirestore,
+    doc,
+    setDoc,
     updateDoc,
     onSnapshot,
     collection,
@@ -19,6 +19,7 @@ import {
     where,
     addDoc
 } from 'firebase/firestore';
+import { testFirebaseConfig, testRedirectUrls } from './utils/firebaseTest';
 
 // --- Firebase Configuration ---
 // NOTE FOR DEPLOYMENT: For a real production environment, these values should be
@@ -39,6 +40,12 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
+// Debug: Check if Firebase is initialized correctly
+console.log("Firebase initialized with config:", {
+  authDomain: firebaseConfig.authDomain,
+  projectId: firebaseConfig.projectId
+});
+
 // --- Main App Component ---
 function App() {
     const [page, setPage] = useState('landing');
@@ -54,40 +61,65 @@ function App() {
     const [styleSuggestions, setStyleSuggestions] = useState([]);
     const [linkedInBio, setLinkedInBio] = useState('');
 
+    // Run Firebase configuration test on component mount
+    useEffect(() => {
+        testFirebaseConfig();
+        testRedirectUrls();
+    }, []);
+
 
     // --- Authentication Effect ---
     useEffect(() => {
+        // Check if we're coming back from an authentication redirect
+        const urlParams = new URLSearchParams(window.location.search);
+        const hasAuthParams = urlParams.has('apiKey') || urlParams.has('authType') ||
+                             window.location.href.includes('__/auth/handler');
+        
+        console.log("Auth effect - URL contains auth params:", hasAuthParams);
+        console.log("Current URL:", window.location.href);
+
         // Process the redirect result when the component mounts.
         // This finalizes the sign-in process initiated by signInWithRedirect.
-        getRedirectResult(auth).catch((error) => {
-            // Handle errors here, such as the user closing the sign-in window.
-            setError("Failed to complete sign-in. Please try again.");
-            console.error("Auth redirect error:", error);
-            // If the redirect fails, we should stop the loading indicator.
-            setIsAuthLoading(false);
-        });
+        // Use a small delay to ensure Firebase is fully initialized
+        const processRedirect = setTimeout(() => {
+            console.log("Processing redirect result...");
+            getRedirectResult(auth)
+                .then((result) => {
+                    if (result) {
+                        // User successfully signed in with redirect
+                        console.log("Redirect sign-in successful:", result.user);
+                        console.log("Redirect result:", result);
+                        
+                        // Force a re-check of auth state to ensure user is properly set
+                        auth.currentUser?.reload().then(() => {
+                            console.log("User reloaded after redirect");
+                        }).catch(err => {
+                            console.error("Error reloading user:", err);
+                        });
+                    } else {
+                        console.log("No redirect result - user may have navigated directly or session expired");
+                    }
+                })
+                .catch((error) => {
+                    // Handle errors here, such as the user closing the sign-in window.
+                    console.error("Auth redirect error details:", {
+                        code: error.code,
+                        message: error.message,
+                        email: error.email,
+                        credential: error.credential
+                    });
+                    
+                    // Only show error if it's not a redirect cancellation
+                    if (error.code !== 'auth/redirect-cancelled-by-user') {
+                        setError(`Failed to complete sign-in: ${error.message}. Please try again.`);
+                    }
+                    // If the redirect fails, we should stop the loading indicator.
+                    setIsAuthLoading(false);
+                });
+        }, hasAuthParams ? 2000 : 500); // Longer delay if we have auth params
+
+        return () => clearTimeout(processRedirect);
     
-        // onAuthStateChanged is the single source of truth for the user's auth state.
-        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-            if (currentUser) {
-                setUser(currentUser);
-                setPage('dashboard');
-            } else {
-                setUser(null);
-                // Only set page to landing if not on a legal page
-                if (page !== 'privacy' && page !== 'terms') {
-                    setPage('landing');
-                }
-                setProfile(null);
-                setGeneratedImages([]);
-            }
-            // This is the definitive point where we know the auth state has been determined.
-            // Whether the user is logged in or out, the initial auth check is complete.
-            setIsAuthLoading(false);
-        });
-    
-        // Cleanup the listener when the component unmounts.
-        return () => unsubscribe();
     }, []); // This should only run ONCE on component mount.
 
     // --- User Profile & Data Listener Effect ---
