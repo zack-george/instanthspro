@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import {
     getAuth,
-    onAuthStateChanged,
     signInWithRedirect,
     getRedirectResult,
     GoogleAuthProvider,
@@ -19,7 +18,6 @@ import {
     where,
     addDoc
 } from 'firebase/firestore';
-import { testFirebaseConfig, testRedirectUrls } from './utils/firebaseTest';
 
 // --- Firebase Configuration ---
 // NOTE FOR DEPLOYMENT: For a real production environment, these values should be
@@ -49,7 +47,7 @@ console.log("Firebase initialized with config:", {
 // --- Main App Component ---
 function App() {
     const [page, setPage] = useState('landing');
-    const [user, setUser] = useState(null);
+    const [user, setUser] = useState(null); // eslint-disable-line @typescript-eslint/no-unused-vars
     const [profile, setProfile] = useState(null);
     const [uploadedFiles, setUploadedFiles] = useState([]);
     const [generatedImages, setGeneratedImages] = useState([]);
@@ -61,11 +59,6 @@ function App() {
     const [styleSuggestions, setStyleSuggestions] = useState([]);
     const [linkedInBio, setLinkedInBio] = useState('');
 
-    // Run Firebase configuration test on component mount
-    useEffect(() => {
-        testFirebaseConfig();
-        testRedirectUrls();
-    }, []);
 
 
     // --- Authentication Effect ---
