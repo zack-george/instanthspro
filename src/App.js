@@ -3,9 +3,13 @@ import { initializeApp } from 'firebase/app';
 import {
     getAuth,
     signInWithRedirect,
+    signInWithPopup,
     getRedirectResult,
     GoogleAuthProvider,
-    signOut
+    signOut,
+    onAuthStateChanged,
+    setPersistence,
+    browserLocalPersistence
 } from 'firebase/auth';
 import {
     getFirestore,
@@ -38,6 +42,15 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
+// Set auth persistence to preserve login state
+setPersistence(auth, browserLocalPersistence)
+    .then(() => {
+        console.log("Auth persistence set to local storage");
+    })
+    .catch((error) => {
+        console.error("Error setting auth persistence:", error);
+    });
+
 // Debug: Check if Firebase is initialized correctly
 console.log("Firebase initialized with config:", {
   authDomain: firebaseConfig.authDomain,
@@ -63,6 +76,31 @@ function App() {
 
     // --- Authentication Effect ---
     useEffect(() => {
+        // Set up auth state listener to track user authentication
+        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+            console.log("Auth state changed:", currentUser);
+            console.log("Setting user state and page to dashboard if authenticated");
+            setUser(currentUser);
+            if (currentUser) {
+                // User is authenticated, set page to dashboard
+                console.log("User authenticated, setting page to dashboard");
+                setPage('dashboard');
+            } else {
+                console.log("No user authenticated, keeping current page state");
+            }
+            setIsAuthLoading(false); // Stop loading when auth state is determined
+        });
+
+        // Also check current auth state immediately
+        const currentUser = auth.currentUser;
+        console.log("Current auth state on mount:", currentUser);
+        if (currentUser) {
+            console.log("User already authenticated on mount, setting page to dashboard");
+            setPage('dashboard');
+            setUser(currentUser);
+            setIsAuthLoading(false);
+        }
+
         // Check if we're coming back from an authentication redirect
         const urlParams = new URLSearchParams(window.location.search);
         const hasAuthParams = urlParams.has('apiKey') || urlParams.has('authType') ||
@@ -76,8 +114,12 @@ function App() {
         // Use a small delay to ensure Firebase is fully initialized
         const processRedirect = setTimeout(() => {
             console.log("Processing redirect result...");
+            console.log("Current URL:", window.location.href);
+            console.log("Has auth params:", hasAuthParams);
+            
             getRedirectResult(auth)
                 .then((result) => {
+                    console.log("Redirect result received:", !!result);
                     if (result) {
                         // User successfully signed in with redirect
                         console.log("Redirect sign-in successful:", result.user);
@@ -91,7 +133,10 @@ function App() {
                         });
                     } else {
                         console.log("No redirect result - user may have navigated directly or session expired");
+                        console.log("Current auth state:", auth.currentUser);
                     }
+                    // Always stop auth loading after processing redirect result
+                    setIsAuthLoading(false);
                 })
                 .catch((error) => {
                     // Handle errors here, such as the user closing the sign-in window.
@@ -109,9 +154,12 @@ function App() {
                     // If the redirect fails, we should stop the loading indicator.
                     setIsAuthLoading(false);
                 });
-        }, hasAuthParams ? 2000 : 500); // Longer delay if we have auth params
+        }, hasAuthParams ? 3000 : 1000); // Longer delay if we have auth params
 
-        return () => clearTimeout(processRedirect);
+        return () => {
+            clearTimeout(processRedirect);
+            unsubscribe(); // Clean up auth listener
+        };
     
     }, []); // This should only run ONCE on component mount.
 
@@ -187,11 +235,43 @@ function App() {
     const handleSignIn = () => {
         setIsAuthLoading(true); // Give immediate feedback
         const provider = new GoogleAuthProvider();
-        signInWithRedirect(auth, provider).catch((error) => {
-            setError("Could not start sign-in process. Please check browser settings for pop-ups or third-party cookies.");
-            setIsAuthLoading(false); // Stop loading on immediate failure
-            console.error(error.message)
-        });
+        
+        console.log("Initiating Google login with redirect...");
+        console.log("Current domain:", window.location.hostname);
+        console.log("Auth domain:", firebaseConfig.authDomain);
+        
+        // For local development, we need to handle the redirect manually
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            console.log("Local development detected - using popup instead of redirect");
+            
+            // Use signInWithPopup for local development to avoid redirect issues
+            signInWithPopup(auth, provider)
+                .then((result) => {
+                    console.log("Popup sign-in successful:", result.user);
+                    setUser(result.user);
+                    setPage('dashboard');
+                })
+                .catch((error) => {
+                    console.error("Popup sign-in error:", error);
+                    setError("Could not complete sign-in. Please check browser settings for pop-ups.");
+                })
+                .finally(() => {
+                    setIsAuthLoading(false);
+                });
+        } else {
+            // Production - use redirect
+            signInWithRedirect(auth, provider)
+                .then(() => {
+                    console.log("Google login redirect initiated successfully");
+                    sessionStorage.setItem('loginRedirectTime', Date.now());
+                })
+                .catch((error) => {
+                    console.error("Google login error:", error);
+                    setError("Could not start sign-in process. Please check browser settings for pop-ups or third-party cookies.");
+                    setIsAuthLoading(false);
+                    console.error(error.message);
+                });
+        }
     };
 
     const handleSignOut = () => {
@@ -416,8 +496,12 @@ function App() {
         <div className="w-full min-h-screen bg-gray-900 text-white">
             <header className="container mx-auto px-6 py-4 flex justify-between items-center">
                 <h1 className="text-2xl font-bold">AI Headshot Generator</h1>
-                <button 
-                    onClick={handleSignIn} 
+                <button
+                    onClick={() => {
+                        console.log("Login button clicked - calling handleSignIn");
+                        console.log("Window location:", window.location.href);
+                        handleSignIn();
+                    }}
                     disabled={isAuthLoading}
                     className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-4 rounded-lg transition-colors disabled:bg-indigo-400 flex items-center justify-center">
                     {isAuthLoading ? <Spinner small /> : 'Login / Get Started'}
@@ -656,13 +740,33 @@ function App() {
     );
 
     // --- Page Router ---
+    if (isAuthLoading) {
+        return (
+            <div className="w-full min-h-screen bg-gray-900 flex items-center justify-center">
+                <div className="text-white text-xl flex items-center">
+                    <Spinner large />
+                    <span className="ml-4">Authenticating...</span>
+                </div>
+            </div>
+        );
+    }
+    
+    // Page routing logic based on user state
+    console.log("Page routing - user:", user, "page:", page, "isAuthLoading:", isAuthLoading);
+    
+    if (user) {
+        // If user is logged in, show the dashboard
+        console.log("Routing to Dashboard - user is authenticated");
+        return <Dashboard />;
+    }
+
+    // If no user, handle landing and legal pages
+    console.log("Routing to landing/legal pages - no user authenticated");
     switch (page) {
         case 'privacy':
             return <PrivacyPolicy onBack={() => setPage('landing')} />;
         case 'terms':
             return <TermsOfService onBack={() => setPage('landing')} />;
-        case 'dashboard':
-            return <Dashboard />;
         case 'landing':
         default:
             return <LandingPage />;
